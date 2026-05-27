@@ -4047,6 +4047,7 @@ export function TaskRuntimeProvider({
         projectPath: projectPath ?? defaultProjectPathRef.current ?? null,
         setActive: true,
         thinking: orchThinking,
+        autoMode: "off", // replay must not auto-implement; user reviews the merged plan first
       });
 
       // 5. Wrap the post-creation setup in try/catch

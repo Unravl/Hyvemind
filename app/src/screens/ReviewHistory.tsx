@@ -1125,12 +1125,14 @@ function ReplayModal({
   open,
   onClose,
   reviewId,
+  projectPath,
   taskRuntime,
   go,
 }: {
   open: boolean;
   onClose: () => void;
   reviewId: string;
+  projectPath: string | null; // null for legacy rows persisted before migration 0019
   taskRuntime: ReturnType<typeof useTaskRuntime>;
   go: GoFn;
 }) {
@@ -1171,7 +1173,7 @@ function ReplayModal({
       taskRuntime.replayReview({
         enrichedPrompt,
         hivemindId: selectedHivemind,
-        projectPath: taskRuntime.defaultProjectPath || null,
+        projectPath: projectPath ?? null,
       });
       onClose();
       go("tasks");
@@ -1191,6 +1193,12 @@ function ReplayModal({
         (plan + source context) from the original review will be sent to the
         new Hivemind&apos;s models, skipping context gathering.
       </p>
+
+      {projectPath && (
+        <p className="text-[11.5px] text-dim mb-3">
+          Will run against <span className="font-mono text-muted">{projectPath}</span>
+        </p>
+      )}
 
       {noHiveminds ? (
         <div className="text-[12px] text-amber-400 mb-4">
@@ -2470,6 +2478,7 @@ export function ReviewHistoryScreen({ go, hivemind: _hivemindProp }: { go: GoFn;
         open={replayOpen && !!selected}
         onClose={() => setReplayOpen(false)}
         reviewId={selected ? resolveReviewId(selected) : ""}
+        projectPath={selected ? (selected.project_path ?? null) : null}
         taskRuntime={taskRuntime}
         go={go}
       />

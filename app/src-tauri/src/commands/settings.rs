@@ -1871,8 +1871,7 @@ pub async fn test_provider_models(
                         })
                         .collect();
                     // dedup before enrich — both vectors are still 1:1 aligned at this point
-                    let (models, parsed_details) =
-                        dedup_models_and_details(models, parsed_details);
+                    let (models, parsed_details) = dedup_models_and_details(models, parsed_details);
                     let details = enrich_details_with_catalog(&provider, &models, parsed_details);
                     let details = if details_have_any_data(&details) {
                         details
@@ -3318,7 +3317,11 @@ mod tests {
         assert_eq!(out_details.len(), 3);
         // 1:1 alignment invariant.
         for (i, m) in out_models.iter().enumerate() {
-            assert_eq!(m, &out_details[i].id, "models[{}] must align with details[{}]", i, i);
+            assert_eq!(
+                m, &out_details[i].id,
+                "models[{}] must align with details[{}]",
+                i, i
+            );
         }
         // First-occurrence wins: m-a's context_length is the first one (1000), not 1001.
         assert_eq!(out_details[0].context_length, Some(1000));

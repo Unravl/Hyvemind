@@ -230,6 +230,84 @@ describe("ModelBrowserModal", () => {
 
   /* ── Persisted-provider tests ─────────────────────── */
 
+  it("dedupes duplicate ids returned by provider", async () => {
+    // Regression: NVIDIA NIM's /v1/models returns duplicate `id` entries
+    // for the same model. Backend dedupes these now; the frontend has a
+    // defensive dedup as well. This test stages a provider response with
+    // duplicates and asserts the modal renders one row per unique id and
+    // the header count is accurate.
+    tauriEnv = true;
+    try {
+      const ipc = await import("../../lib/ipc");
+      await stageProvidersList([
+        {
+          name: "nvidia-nim",
+          display_name: "NVIDIA NIM",
+          provider_type: "OpenAI Compatible",
+          endpoint: "https://integrate.api.nvidia.com/v1",
+          configured: true,
+          model_count: 0,
+          health: true,
+        },
+      ]);
+      (ipc.refreshModels as any).mockResolvedValue([]);
+      (ipc.testProviderModels as any).mockResolvedValue({
+        ok: true,
+        models: ["m1", "m1", "m2"],
+        details: [
+          {
+            id: "m1",
+            name: null,
+            context_length: null,
+            max_output: null,
+            input_price: null,
+            output_price: null,
+          },
+          {
+            id: "m1",
+            name: null,
+            context_length: null,
+            max_output: null,
+            input_price: null,
+            output_price: null,
+          },
+          {
+            id: "m2",
+            name: null,
+            context_length: null,
+            max_output: null,
+            input_price: null,
+            output_price: null,
+          },
+        ],
+        error: null,
+      });
+
+      render(
+        <ModelBrowserModal
+          open={true}
+          onClose={onClose}
+          onSelect={onSelect}
+          initialProvider="nvidia-nim"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("m1")).toBeInTheDocument();
+      });
+
+      // Only one row per unique id.
+      expect(screen.getAllByText("m1")).toHaveLength(1);
+      expect(screen.getAllByText("m2")).toHaveLength(1);
+
+      // Header count reflects deduped length, not raw response length.
+      expect(screen.getByText("2 available")).toBeInTheDocument();
+      expect(screen.queryByText("3 available")).not.toBeInTheDocument();
+    } finally {
+      tauriEnv = false;
+    }
+  });
+
   it("remembers the last clicked provider tab across modal opens", async () => {
     const user = userEvent.setup();
 

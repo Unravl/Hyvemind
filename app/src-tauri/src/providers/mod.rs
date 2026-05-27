@@ -1399,8 +1399,7 @@ impl PiSubscriptionProvider {
             .map_err(|e| anyhow!("failed to send prompt: {}", e))?;
 
         let effective_timeout = timeout.unwrap_or(Duration::from_secs(180));
-        let result =
-            tokio::time::timeout(effective_timeout, session.collect_response()).await;
+        let result = tokio::time::timeout(effective_timeout, session.collect_response()).await;
 
         // Drain the captured `submit_review` tool args BEFORE killing the
         // session — kill drops the captured-args map.

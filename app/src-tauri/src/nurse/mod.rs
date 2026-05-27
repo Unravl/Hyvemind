@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Nurse subsystem — push-driven, detector-based session health monitor.
 //!
 //! See `nurse/README.md` for the architecture deep-dive (added in step 9
@@ -34,12 +36,3 @@ pub mod storm_guard;
 pub mod supervisor;
 pub mod synthesized;
 
-pub use bus::{NurseBus, NurseBusEvent, SessionEndReason};
-pub use config::{NurseConfig, NurseMode, NurseProfile, ProfileConfig};
-pub use engine::NurseEngine;
-pub use snapshot::{
-    BatchTickSnapshotDto, NurseActionKind, NurseDecision, NurseDecisionDto, NurseDispatchTier,
-    NurseEvent, NurseInterventionRecord, NurseLifecyclePayload, NurseLifecycleStatus,
-    NurseServiceConfigSnapshot, NurseStatusSnapshot, SessionOwnerDto,
-};
-pub use synthesized::{describe_synthesized, InterventionOwner, SynthesizedKind};

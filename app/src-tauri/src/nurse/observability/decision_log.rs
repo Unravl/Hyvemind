@@ -8,7 +8,7 @@
 //! rewrite plan for the full envelope shape and per-event payloads.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};

@@ -1249,8 +1249,8 @@ async fn run_pipeline(
     }
 
     // ── Step 7: Tier 1.
-    let mut decision: NurseDecision;
-    let mut tier_used: NurseDispatchTier;
+    let decision: NurseDecision;
+    let tier_used: NurseDispatchTier;
     if let Some((action, entry_id, downgrade)) = tier1_hit {
         decisions_logger.write(devts::tier1_evaluated(
             &decision_id,

@@ -15,7 +15,7 @@ use anyhow::{anyhow, Result};
 
 use crate::nurse::config::NurseConfig;
 use crate::nurse::health::SessionHealth;
-use crate::nurse::schema::{nurse_input_schema, structured_config_for_provider, NURSE_TOOL_NAME};
+use crate::nurse::schema::{structured_config_for_provider, NURSE_TOOL_NAME};
 use crate::nurse::snapshot::NurseDecision;
 use crate::providers::provider_trait::CallRequest;
 use crate::providers::ProviderRegistry;

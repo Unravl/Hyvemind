@@ -13,9 +13,9 @@
 use std::any::Any;
 
 use chrono::Utc;
-use smallvec::{smallvec, SmallVec};
+use smallvec::SmallVec;
 
-use crate::nurse::config::{NurseProfile, StallDetectorConfig};
+use crate::nurse::config::StallDetectorConfig;
 use crate::nurse::detector::{Detector, DetectorContext, SignalDelta, TickKind};
 use crate::nurse::health::{Severity, Signal};
 use crate::pi::events::PiEvent;

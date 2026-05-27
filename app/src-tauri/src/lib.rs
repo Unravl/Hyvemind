@@ -4,11 +4,14 @@ mod domain;
 mod extensions;
 mod hivemind;
 mod nurse;
+#[allow(dead_code)]
 mod pi;
 mod providers;
 mod sentry_setup;
 mod state;
+#[allow(dead_code)]
 mod tunables;
+#[allow(dead_code)]
 mod util;
 
 use std::sync::Arc;

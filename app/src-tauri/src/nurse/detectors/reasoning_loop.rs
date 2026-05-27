@@ -27,10 +27,10 @@ use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use siphasher::sip::SipHasher24;
-use smallvec::{smallvec, SmallVec};
+use smallvec::SmallVec;
 use twox_hash::XxHash64;
 
-use crate::nurse::config::{NurseProfile, ReasoningLoopDetectorConfig};
+use crate::nurse::config::ReasoningLoopDetectorConfig;
 use crate::nurse::detector::{Detector, DetectorContext, SignalDelta, TickKind};
 use crate::nurse::health::{Severity, Signal};
 use crate::pi::events::PiEvent;

@@ -36,7 +36,7 @@ use tokio_util::sync::CancellationToken;
 use crate::nurse::budget::BudgetState;
 use crate::nurse::bus::{NurseBus, NurseBusEvent, SessionEndReason};
 use crate::nurse::config::{NurseConfig, NurseProfile};
-use crate::nurse::detector::{Detector, DetectorContext, DetectorRegistry, SignalDelta, TickKind};
+use crate::nurse::detector::{DetectorContext, DetectorRegistry, SignalDelta, TickKind};
 use crate::nurse::detectors::{
     ContextSaturationDetector, ProcessHealthDetector, ProviderHealthDetector,
     ReasoningLoopDetector, RetryExhaustionDetector, StallDetector, ToolFailureDetector,

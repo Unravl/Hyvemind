@@ -1553,6 +1553,85 @@ fn enrich_details_with_catalog(
     out
 }
 
+/// Deduplicate `models` (and the parallel `details` vector when present),
+/// keeping the first occurrence of each id. Preserves the provider's original
+/// ordering — important because curated lists (e.g. OpenAI returns newest
+/// first) and downstream tests that pick a "random model" rely on order
+/// stability.
+///
+/// Behaviour:
+/// - `details.is_empty()` — dedup `models` only; return `details` unchanged.
+/// - `details.len() == models.len()` — walk `models` once, keep first index
+///   per unique id, project both vectors through the same kept indices so the
+///   1:1 alignment promised by `enrich_details_with_catalog` is preserved.
+/// - Lengths differ AND `details` non-empty — unexpected with current
+///   parsers. Warn and fall back to deduping `models` only (`details`
+///   unchanged) to avoid panics while surfacing the anomaly.
+///
+/// Motivated by NVIDIA NIM's `/v1/models` returning duplicate `id` entries
+/// for the same model, which collide on React `key` and inflate the visible
+/// count downstream.
+fn dedup_models_and_details(
+    models: Vec<String>,
+    details: Vec<ModelDetail>,
+) -> (Vec<String>, Vec<ModelDetail>) {
+    use std::collections::HashSet;
+
+    if details.is_empty() {
+        let mut seen: HashSet<String> = HashSet::with_capacity(models.len());
+        let mut out_models: Vec<String> = Vec::with_capacity(models.len());
+        for id in models {
+            if seen.insert(id.clone()) {
+                out_models.push(id);
+            }
+        }
+        return (out_models, details);
+    }
+
+    if details.len() == models.len() {
+        let mut seen: HashSet<String> = HashSet::with_capacity(models.len());
+        let mut kept: Vec<usize> = Vec::with_capacity(models.len());
+        for (i, id) in models.iter().enumerate() {
+            if seen.insert(id.clone()) {
+                kept.push(i);
+            }
+        }
+        let mut out_models: Vec<String> = Vec::with_capacity(kept.len());
+        let mut out_details: Vec<ModelDetail> = Vec::with_capacity(kept.len());
+        // Project both vectors through `kept`. We index by walking once and
+        // consuming the originals to avoid cloning ModelDetail entries.
+        let mut kept_iter = kept.into_iter().peekable();
+        for (i, (m, d)) in models.into_iter().zip(details.into_iter()).enumerate() {
+            match kept_iter.peek() {
+                Some(&next) if next == i => {
+                    out_models.push(m);
+                    out_details.push(d);
+                    kept_iter.next();
+                }
+                _ => { /* drop the duplicate */ }
+            }
+        }
+        return (out_models, out_details);
+    }
+
+    // Unexpected: non-empty details with a length mismatch. Fall back to the
+    // safe path so we don't panic, but log it so a future provider quirk is
+    // visible in the logs.
+    warn!(
+        models_len = models.len(),
+        details_len = details.len(),
+        "dedup_models_and_details: unexpected length mismatch between models and details; deduping models only"
+    );
+    let mut seen: HashSet<String> = HashSet::with_capacity(models.len());
+    let mut out_models: Vec<String> = Vec::with_capacity(models.len());
+    for id in models {
+        if seen.insert(id.clone()) {
+            out_models.push(id);
+        }
+    }
+    (out_models, details)
+}
+
 /// Returns true if at least one detail entry carries any rich metadata. Used
 /// to decide whether to surface the rich-columns table on the frontend.
 fn details_have_any_data(details: &[ModelDetail]) -> bool {
@@ -1665,10 +1744,11 @@ pub async fn test_provider_models(
                 match serde_json::from_str::<AnthropicModelsResponse>(&body) {
                     Ok(parsed) => {
                         let models: Vec<String> = parsed.data.into_iter().map(|m| m.id).collect();
+                        let (models, details) = dedup_models_and_details(models, vec![]);
                         Ok(TestModelsResult {
                             ok: true,
                             models,
-                            details: vec![],
+                            details,
                             error: None,
                         })
                     }
@@ -1745,6 +1825,8 @@ pub async fn test_provider_models(
                                 }
                             })
                             .collect();
+                        // dedup before enrich — both vectors are still 1:1 aligned at this point
+                        let (models, details) = dedup_models_and_details(models, details);
                         let details = enrich_details_with_catalog(&provider, &models, details);
                         return Ok(TestModelsResult {
                             ok: true,
@@ -1788,6 +1870,9 @@ pub async fn test_provider_models(
                             }
                         })
                         .collect();
+                    // dedup before enrich — both vectors are still 1:1 aligned at this point
+                    let (models, parsed_details) =
+                        dedup_models_and_details(models, parsed_details);
                     let details = enrich_details_with_catalog(&provider, &models, parsed_details);
                     let details = if details_have_any_data(&details) {
                         details
@@ -1804,6 +1889,7 @@ pub async fn test_provider_models(
                 match serde_json::from_str::<OaiModelsResponse>(&body) {
                     Ok(parsed) => {
                         let models: Vec<String> = parsed.data.into_iter().map(|m| m.id).collect();
+                        let (models, _) = dedup_models_and_details(models, vec![]);
                         let details = enrich_details_with_catalog(&provider, &models, vec![]);
                         let details = if details_have_any_data(&details) {
                             details
@@ -3198,6 +3284,97 @@ mod tests {
         // output_price was None on the parsed side, catalog provides 10.0
         assert_eq!(merged[0].output_price, Some(10.0));
         assert_eq!(merged[0].max_output, Some(42));
+    }
+
+    #[test]
+    fn test_dedup_models_and_details_removes_duplicates_preserving_order() {
+        // NIM-style: duplicate ids appear in `models`, with parallel `details`.
+        let models = vec![
+            "m-a".to_string(),
+            "m-b".to_string(),
+            "m-a".to_string(), // dup
+            "m-c".to_string(),
+            "m-b".to_string(), // dup
+        ];
+        let mk = |id: &str, ctx: u64| ModelDetail {
+            id: id.to_string(),
+            name: None,
+            context_length: Some(ctx),
+            max_output: None,
+            input_price: None,
+            output_price: None,
+        };
+        let details = vec![
+            mk("m-a", 1000),
+            mk("m-b", 2000),
+            mk("m-a", 1001), // dup
+            mk("m-c", 3000),
+            mk("m-b", 2001), // dup
+        ];
+
+        let (out_models, out_details) = dedup_models_and_details(models, details);
+
+        assert_eq!(out_models, vec!["m-a", "m-b", "m-c"]);
+        assert_eq!(out_details.len(), 3);
+        // 1:1 alignment invariant.
+        for (i, m) in out_models.iter().enumerate() {
+            assert_eq!(m, &out_details[i].id, "models[{}] must align with details[{}]", i, i);
+        }
+        // First-occurrence wins: m-a's context_length is the first one (1000), not 1001.
+        assert_eq!(out_details[0].context_length, Some(1000));
+        assert_eq!(out_details[1].context_length, Some(2000));
+        assert_eq!(out_details[2].context_length, Some(3000));
+    }
+
+    #[test]
+    fn test_dedup_models_and_details_handles_empty_details() {
+        // Anthropic + bare-OAI branches pass `details: vec![]`.
+        let models = vec!["a".to_string(), "a".to_string(), "b".to_string()];
+        let (out_models, out_details) = dedup_models_and_details(models, vec![]);
+        assert_eq!(out_models, vec!["a", "b"]);
+        assert!(out_details.is_empty());
+    }
+
+    #[test]
+    fn test_dedup_models_and_details_noop_when_unique() {
+        let models = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let mk = |id: &str| ModelDetail {
+            id: id.to_string(),
+            name: None,
+            context_length: None,
+            max_output: None,
+            input_price: None,
+            output_price: None,
+        };
+        let details = vec![mk("a"), mk("b"), mk("c")];
+        let (out_models, out_details) = dedup_models_and_details(models.clone(), details);
+        assert_eq!(out_models, models);
+        assert_eq!(out_details.len(), 3);
+        assert_eq!(out_details[0].id, "a");
+        assert_eq!(out_details[1].id, "b");
+        assert_eq!(out_details[2].id, "c");
+    }
+
+    #[test]
+    fn test_dedup_runs_before_catalog_enrich() {
+        // Integration: duplicated ids fed through dedup + catalog enrich must
+        // yield exactly one merged entry per unique id, with catalog metadata
+        // intact.
+        let models = vec![
+            "gpt-4o".to_string(),
+            "gpt-4o".to_string(),
+            "gpt-4o-mini".to_string(),
+        ];
+        let (models, details) = dedup_models_and_details(models, vec![]);
+        assert_eq!(models, vec!["gpt-4o", "gpt-4o-mini"]);
+        let merged = enrich_details_with_catalog("openai", &models, details);
+        assert_eq!(merged.len(), 2);
+        // Both should carry catalog data.
+        assert_eq!(merged[0].id, "gpt-4o");
+        assert!(merged[0].context_length.is_some());
+        assert!(merged[0].input_price.is_some());
+        assert_eq!(merged[1].id, "gpt-4o-mini");
+        assert!(merged[1].context_length.is_some());
     }
 
     #[test]

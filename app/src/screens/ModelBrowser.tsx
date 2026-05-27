@@ -149,11 +149,26 @@ export function ModelBrowserModal({ open, onClose, onSelect, initialProvider, in
               });
             })
           );
-          setModels(
-            results
-              .filter((r): r is PromiseFulfilledResult<Model[]> => r.status === "fulfilled")
-              .flatMap((r) => r.value)
-          );
+          // Defensive — backend dedupes per-provider but flatten across
+          // providers and any future quirky provider could still produce
+          // duplicate React keys. Keying by `${provider}/${id}` mirrors the
+          // <button key=...> downstream so we never render two rows with the
+          // same key (which breaks React reconciliation and the click->highlight
+          // mapping). Note that the upstream `detailMap` keeps the *last*
+          // occurrence on duplicate `d.id`, while this filter keeps the *first*
+          // Model — benign because duplicate ids from the same provider carry
+          // identical metadata in practice.
+          const flattened = results
+            .filter((r): r is PromiseFulfilledResult<Model[]> => r.status === "fulfilled")
+            .flatMap((r) => r.value);
+          const seen = new Set<string>();
+          const deduped = flattened.filter((m) => {
+            const key = `${m.provider}/${m.id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          setModels(deduped);
         })(),
         timeout,
       ]);

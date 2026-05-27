@@ -35,6 +35,7 @@ export function ShortcutCheatsheet({ open, onClose }: ShortcutCheatsheetProps) {
     {
       name: "Actions",
       shortcuts: [
+        { keys: ["C"], desc: "Quick Task" },
         { keys: [mod, shift, "T"], desc: "Quick Task" },
         { keys: ["?"], desc: "Keyboard shortcuts" },
         { keys: ["Esc"], desc: "Close modal / dialog" },

@@ -358,7 +358,7 @@ function Topbar({
           data-tauri-drag-region={false}
           onClick={onOpenQuickTask}
           className="flex items-center gap-1.5 px-2.5 h-7 rounded-md border border-honey-500/40 bg-honey-500/10 text-honey-200 hover:bg-honey-500/15 transition"
-          title="Quick Task (⌘⇧T)"
+          title={`Quick Task (C or ${isMac() ? "⌘⇧T" : "Ctrl+Shift+T"})`}
         >
           {I.rocket({ size: 11, className: "text-honey-400" })}
           <span className="text-[11px] font-medium">Quick Task</span>
@@ -498,6 +498,52 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Quick Task (Linear-style): plain "C" with no modifier and no input focused.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Already open? Don't re-fire (the dialog's own textarea would also
+      // swallow this via the input check below, but belt-and-suspenders).
+      if (quickOpen) return;
+
+      // Modifier keys are reserved for other shortcuts (Cmd+C copy, etc.).
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      // IME composition — Korean/Japanese/Chinese input passes through
+      // keydown with isComposing=true; consuming would break IME UX.
+      if (e.isComposing || e.key === "Process") return;
+
+      // Skip auto-repeat so holding "C" doesn't bounce.
+      if (e.repeat) return;
+
+      // Only process the actual C key (both lower and upper case).
+      // shiftKey is deliberately NOT excluded so that Shift+C (capital C)
+      // also triggers Quick Task, matching Linear's behaviour; Cmd/Ctrl/Alt
+      // are already filtered out above so native copy is never interrupted.
+      if (e.key !== "c" && e.key !== "C") return;
+
+      // Don't hijack typing — same guard as the "?" cheatsheet listener.
+      const el = document.activeElement;
+      if (el) {
+        const tag = el.tagName.toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select") return;
+        if ((el as HTMLElement).isContentEditable) return;
+      }
+
+      // Don't open Quick Task on top of another modal (cheatsheet,
+      // ErrorModal, SwarmQuestionModal, QuickTaskDialog itself, …).
+      // Modal in atoms.tsx tags every dialog with role+aria-modal.
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+
+      // Don't open Quick Task on top of the dev-only inspector overlay.
+      if (inspectorOn) return;
+
+      e.preventDefault();
+      setQuickOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [quickOpen, inspectorOn]);
 
   // Cheatsheet: open on `?` when no input/textarea/select/contenteditable is focused
   useEffect(() => {

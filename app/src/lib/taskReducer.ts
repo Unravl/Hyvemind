@@ -99,6 +99,10 @@ export interface TaskMessage {
    *  this message is not, so the user can scroll back and see what
    *  failed in past turns. */
   errorMessage?: string;
+  /** Compound dedup key for Hivemind model-failure error bubbles.
+   *  Format: `${jobId}::${round}::${modelId}::${modelIdx}`.
+   *  Only set when `who === "error"` and the error originated from `hm_model_failed`. */
+  hivemindFailureKey?: string;
   /** Parsed Swarm features from the Queen plan block. Populated on `plan`
    *  messages during streaming/done and used to survive serialization so
    *  Launch Swarm remains active across tab switches and app restarts. */
@@ -370,7 +374,7 @@ export type TaskEvent =
   | { kind: "hm_started"; jobId: string }
   | { kind: "hm_round_started"; jobId: string; round: number; models?: string[] }
   | { kind: "hm_model_completed"; jobId: string; modelId: string; round: number; inputTokens?: number; outputTokens?: number; durationMs?: number; cost?: number }
-  | { kind: "hm_model_failed"; jobId: string; modelId: string; round: number; error: string }
+  | { kind: "hm_model_failed"; jobId: string; modelId: string; modelIdx?: number; round: number; error: string }
   | { kind: "hm_round_completed"; jobId: string; round: number }
   | { kind: "hm_completed"; jobId: string }
   | { kind: "hm_failed"; jobId: string; message: string }
@@ -1702,23 +1706,77 @@ export function applyTaskEvent(
       if (!prev.reviewProgress) return prev;
       const round = prev.reviewProgress.rounds.find((r) => r.round === ev.round);
       if (!round) return prev;
+
+      // ── Persistent conversation bubble ──
+      // Append a `who: "error"` bubble so the failure survives both the live
+      // dock collapse (auto-collapse 5s after terminal state) and a reload
+      // of the task from disk. Dedup on the compound key — this allows
+      // distinct `modelIdx` values for the same `modelId` to produce
+      // separate bubbles, while a re-emit of the same
+      // `(jobId, round, modelId, modelIdx)` tuple is a no-op.
+      // We deliberately scan the trailing tail (not the whole list) so the
+      // common case is O(1); duplicate keys deeper in history are still
+      // detected via a bounded scan (last 64 entries) to keep state size
+      // from growing unbounded under a buggy back-end re-emit storm.
+      const dedupKey = `${ev.jobId}::${ev.round}::${ev.modelId}::${ev.modelIdx ?? 0}`;
+      const tailStart = Math.max(0, prev.messages.length - 64);
+      let alreadyEmitted = false;
+      for (let i = prev.messages.length - 1; i >= tailStart; i--) {
+        const m = prev.messages[i];
+        if (m.who === "error" && m.hivemindFailureKey === dedupKey) {
+          alreadyEmitted = true;
+          break;
+        }
+      }
+      const displayMessage = `Hivemind reviewer ${ev.modelId} (round ${ev.round}) failed: ${ev.error}`;
+      const messages: TaskMessage[] = alreadyEmitted
+        ? prev.messages
+        : [
+            ...prev.messages,
+            {
+              who: "error" as const,
+              errorMessage: displayMessage,
+              hivemindFailureKey: dedupKey,
+              t: new Date().toISOString(),
+              createdAt: Date.now(),
+            },
+          ];
+
+      // ── Row-state transition ──
+      // The existing `ReviewProgress.rounds[].models[]` shape is keyed by
+      // position/modelId (not by `modelIdx`). When duplicate-instance
+      // reviewers share a `modelId`, `findIndex` returns the first match;
+      // we still update that row once, then short-circuit further row
+      // updates — but the per-modelIdx bubble above is unconditional on
+      // its own dedup key, so each instance still surfaces a distinct
+      // failure bubble in the conversation transcript.
       const idx = round.models.findIndex((m) => modelMatches(m.modelId, ev.modelId));
-      if (idx === -1) return prev;
-      if (round.models[idx].status === "failed") return prev;
-      const updated: ModelRunState = {
-        ...round.models[idx],
-        status: "failed",
-        error: ev.error,
-      };
-      const nextModels = [...round.models];
-      nextModels[idx] = updated;
-      const nextRound: RoundRunState = { round: round.round, models: nextModels };
-      return {
-        ...prev,
-        reviewProgress: {
+      let nextReviewProgress = prev.reviewProgress;
+      if (idx !== -1 && round.models[idx].status !== "failed") {
+        const updated: ModelRunState = {
+          ...round.models[idx],
+          status: "failed",
+          error: ev.error,
+        };
+        const nextModels = [...round.models];
+        nextModels[idx] = updated;
+        const nextRound: RoundRunState = { round: round.round, models: nextModels };
+        nextReviewProgress = {
           ...prev.reviewProgress,
           rounds: setRound(prev.reviewProgress.rounds, nextRound),
-        },
+        };
+      }
+
+      // If neither the messages list nor the row state changed, return
+      // `prev` unchanged so React skips a downstream re-render.
+      if (alreadyEmitted && nextReviewProgress === prev.reviewProgress) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        messages,
+        reviewProgress: nextReviewProgress,
       };
     }
 
@@ -1976,6 +2034,8 @@ export function applyTaskEvent(
 
     case "review_resync": {
       if (prev.activeReviewJobId !== ev.snapshot.job_id) return prev;
+      // TODO: Synthesise `who:"error"` bubbles for steps with `status === "failed"`
+      // so reloaded tasks show the same failure transcript as live-reviewed ones.
       
       // ── Phase preservation ──
       // The frontend's phase is driven by the runtime (taskRuntime.tsx) via
@@ -2383,6 +2443,7 @@ export function mapHivemindEventToTaskEvent(e: HivemindProgressEvent): TaskEvent
         kind: "hm_model_failed",
         jobId: e.job_id,
         modelId: e.model_id,
+        modelIdx: e.model_idx,
         round: e.round,
         error: e.message,
       };

@@ -114,6 +114,25 @@ function ElapsedTime({ startedAt, endedAt, className }: ElapsedTimeProps) {
   );
 }
 
+async function copyErrorToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Some Tauri WebViews restrict the modern Clipboard API. Fall back
+    // to the legacy `execCommand('copy')` via a transient textarea so
+    // users can still copy the full provider error for bug reports.
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+    } finally {
+      document.body.removeChild(ta);
+    }
+  }
+}
+
 function renderModelRow(
   m: ModelState,
   runStartedAt: number,
@@ -124,48 +143,72 @@ function renderModelRow(
   const textSize = compact ? "text-[11px]" : "text-[12px]";
 
   return (
-    <div
-      key={m.instanceKey}
-      className={`flex items-center gap-3 ${rowPad} ${textSize}`}
-    >
-      <div className="flex items-center gap-1.5 flex-1 min-w-[60px]">
-        <span className="w-4 h-4 shrink-0 flex items-center justify-center">
-          {m.status === "completed" && I.check({ size: 14, className: "text-emerald-400" })}
-          {m.status === "failed" && I.x({ size: 14, className: "text-red-400" })}
-          {m.status === "streaming" && (
-            <span className="w-3 h-3 rounded-full border-2 border-honey-400/40 border-t-honey-400 animate-spin" />
-          )}
-        </span>
+    <div key={m.instanceKey} className="flex flex-col">
+      <div className={`flex items-center gap-3 ${rowPad} ${textSize}`}>
+        <div className="flex items-center gap-1.5 flex-1 min-w-[60px]">
+          <span className="w-4 h-4 shrink-0 flex items-center justify-center">
+            {m.status === "completed" && I.check({ size: 14, className: "text-emerald-400" })}
+            {m.status === "failed" && I.x({ size: 14, className: "text-red-400" })}
+            {m.status === "streaming" && (
+              <span className="w-3 h-3 rounded-full border-2 border-honey-400/40 border-t-honey-400 animate-spin" />
+            )}
+          </span>
 
-        <span className="font-mono text-white/85 truncate">
-          {label}
-        </span>
+          <span className="font-mono text-white/85 truncate">
+            {label}
+          </span>
+        </div>
+
+        {m.status === "failed" ? (
+          m.errorMessage ? (
+            <span className="text-[10.5px] font-mono text-red-400 shrink-0">Failed</span>
+          ) : (
+            <span className="text-[10.5px] font-mono text-red-400 shrink-0">Model call failed</span>
+          )
+        ) : m.status === "completed" ? (
+          <div className="flex items-center gap-1.5 text-[10.5px] font-mono shrink-0 tabular-nums">
+            <span className="text-blue-300" title="output tokens">
+              &darr;{fmtTok2(m.outputTokens ?? 0)}
+            </span>
+            {(() => {
+              const tps = computeTps(m.outputTokens, m.durationMs);
+              return tps != null ? <span className="text-emerald-300">{tps} t/s</span> : null;
+            })()}
+            {(() => {
+              const dur = fmtDuration(m.durationMs);
+              return dur != null ? <span className="text-honey-300/90">{dur}</span> : null;
+            })()}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 text-[10.5px] font-mono shrink-0 tabular-nums">
+            <ElapsedTime
+              startedAt={runStartedAt}
+              className="text-amber-300/70"
+            />
+          </div>
+        )}
       </div>
 
-      {m.status === "failed" ? (
-        <span className="text-[10.5px] font-mono text-red-400 truncate max-w-[320px]">
-          {m.errorMessage || "failed"}
-        </span>
-      ) : m.status === "completed" ? (
-        <div className="flex items-center gap-1.5 text-[10.5px] font-mono shrink-0 tabular-nums">
-          <span className="text-blue-300" title="output tokens">
-            &darr;{fmtTok2(m.outputTokens ?? 0)}
-          </span>
-          {(() => {
-            const tps = computeTps(m.outputTokens, m.durationMs);
-            return tps != null ? <span className="text-emerald-300">{tps} t/s</span> : null;
-          })()}
-          {(() => {
-            const dur = fmtDuration(m.durationMs);
-            return dur != null ? <span className="text-honey-300/90">{dur}</span> : null;
-          })()}
-        </div>
-      ) : (
-        <div className="flex items-center gap-1 text-[10.5px] font-mono shrink-0 tabular-nums">
-          <ElapsedTime
-            startedAt={runStartedAt}
-            className="text-amber-300/70"
-          />
+      {m.status === "failed" && m.errorMessage && (
+        <div className="px-3 pb-2.5 pt-1 bg-red-500/5 border-t border-red-500/20">
+          <div
+            className="text-[11.5px] text-red-300/90 font-mono leading-relaxed break-words whitespace-pre-wrap max-h-40 overflow-y-auto"
+            role="region"
+            aria-label={`Reviewer ${label} error detail`}
+            aria-live="off"
+          >
+            {m.errorMessage}
+          </div>
+          <button
+            type="button"
+            className="mt-1 text-[10px] font-mono text-honey-300/70 hover:text-honey-200 transition-colors"
+            onClick={() => {
+              void copyErrorToClipboard(m.errorMessage ?? "");
+            }}
+            aria-label={`Copy error message for ${label}`}
+          >
+            Copy error
+          </button>
         </div>
       )}
     </div>

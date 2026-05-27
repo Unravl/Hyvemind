@@ -175,6 +175,53 @@ pub fn dispatch_synthesized(
     completed
 }
 
+/// Write a symmetric `decision_started` + `decision_finalised{status}`
+/// pair for a `report_synthesized` call that was gated *before* any
+/// dispatch. The dispatcher writes the same shape at `dispatcher.rs:520`
+/// (`gated_disabled`) and `:610` (`gated_swarms_only`) — keep the row
+/// envelope identical so analytics under
+/// `~/.hyvemind/debug/nurse/decisions.jsonl.YYYY-MM-DD` stays symmetric.
+///
+/// `status` must be `"gated_disabled"` or `"gated_swarms_only"`. The
+/// decision-log `owner` field stays `None` to match the synthesized
+/// dispatch path (see [`dispatch_synthesized`]).
+pub(crate) fn write_gated_synthesized_pair(
+    logger: &Arc<DecisionLogger>,
+    owner: &InterventionOwner,
+    kind: &SynthesizedKind,
+    status: &str,
+) {
+    let decision_id = Uuid::new_v4().simple().to_string();
+    let session_id_opt = owner.session_id.clone();
+    let severity = severity_for(kind);
+    let dedup = synthesized_dedup_key(kind);
+    let tier_at_birth = format!("{:?}", severity.tier()).to_lowercase();
+
+    logger.write(dec_events::decision_started(
+        &decision_id,
+        &session_id_opt,
+        &None,
+        &None,
+        0,
+        "report_synthesized",
+        &tier_at_birth,
+        "synthesized",
+        severity,
+        &dedup,
+    ));
+    logger.write(dec_events::decision_finalised(
+        &decision_id,
+        &session_id_opt,
+        &None,
+        &None,
+        1,
+        status,
+        0,
+        1,
+        serde_json::Value::Null,
+    ));
+}
+
 /// Build a legacy-shaped `NurseInterventionRecord` from a completed
 /// lifecycle payload — used for the in-memory ring buffer.
 pub fn record_from_payload(payload: &NurseLifecyclePayload) -> NurseInterventionRecord {

@@ -170,6 +170,17 @@ pub struct NurseEngine {
     /// decisions back through the dispatcher. Catches loops the
     /// heuristic detectors miss.
     pub batch_reviewer: Arc<tokio::sync::OnceCell<Arc<crate::nurse::batch_review::BatchReviewer>>>,
+    /// Sync-readable mirror of `config.read().await.enabled`. The
+    /// synthesized path (`report_synthesized`) is sync and called from
+    /// spawned async tasks, so it can't await on the config RwLock.
+    /// `set_nurse_config` is the only mutator and keeps this in sync.
+    /// IMPORTANT: keep `engine.master_enabled` in sync if a new writer
+    /// of `config.enabled` lands.
+    pub master_enabled: Arc<AtomicBool>,
+    /// Mirror of `config.read().await.swarms_only`. Same rationale.
+    /// IMPORTANT: keep `engine.master_swarms_only` in sync if a new
+    /// writer of `config.swarms_only` lands.
+    pub master_swarms_only: Arc<AtomicBool>,
     shutdown: CancellationToken,
 }
 
@@ -197,6 +208,8 @@ impl NurseEngine {
             tracing::warn!(error = %e, "nurse observability startup prune failed");
         }
         let intervention_writer = Arc::new(InterventionWriter::new(Arc::new(AtomicU64::new(0))));
+        let master_enabled = Arc::new(AtomicBool::new(config.enabled));
+        let master_swarms_only = Arc::new(AtomicBool::new(config.swarms_only));
         Ok(Self {
             bus,
             pi_manager,
@@ -212,6 +225,8 @@ impl NurseEngine {
             in_flight: Arc::new(std::sync::Mutex::new(HashMap::new())),
             dispatcher: Arc::new(tokio::sync::OnceCell::new()),
             batch_reviewer: Arc::new(tokio::sync::OnceCell::new()),
+            master_enabled,
+            master_swarms_only,
             shutdown: CancellationToken::new(),
         })
     }
@@ -232,6 +247,20 @@ impl NurseEngine {
         dispatcher: Arc<crate::nurse::dispatcher::Dispatcher>,
     ) {
         let _ = self.dispatcher.set(dispatcher);
+    }
+
+    /// IMPORTANT: keep `master_enabled` in sync if this is the last
+    /// writer. Sole production caller today is
+    /// `commands::nurse::set_nurse_config`.
+    pub fn set_master_enabled(&self, v: bool) {
+        self.master_enabled.store(v, Ordering::Relaxed);
+    }
+
+    /// IMPORTANT: keep `master_swarms_only` in sync if this is the last
+    /// writer. Sole production caller today is
+    /// `commands::nurse::set_nurse_config`.
+    pub fn set_master_swarms_only(&self, v: bool) {
+        self.master_swarms_only.store(v, Ordering::Relaxed);
     }
 
     /// Late-attach the batched LLM reviewer. Optional — if never
@@ -344,11 +373,51 @@ impl NurseEngine {
     /// three-tier pipeline and emits Lifecycle directly. Returns the
     /// completed payload so the caller can also broadcast on other
     /// channels (e.g. `swarm-event`).
+    ///
+    /// Gated on the engine's master `enabled` / `swarms_only` mirrors
+    /// (see `Self::master_enabled` / `Self::master_swarms_only`) so
+    /// "Nurse off" in the UI truly silences the synthesized path — the
+    /// dispatcher already gates on the same bits at `dispatcher.rs:520`
+    /// and `:610`, and we mirror those gates here so the synthesized
+    /// emit-Lifecycle code path is symmetric. When gated, a
+    /// `decision_started` + `decision_finalised{status}` pair is still
+    /// written to the decision log so analytics stay consistent.
     pub fn report_synthesized(
         self: &Arc<Self>,
         owner: InterventionOwner,
         kind: SynthesizedKind,
     ) -> Option<crate::nurse::snapshot::NurseLifecyclePayload> {
+        // Master switch — when Nurse is "off" in the UI, the synthesized
+        // path stays silent (matches the dispatcher's `gated_disabled`
+        // behaviour at dispatcher.rs:520 / :954). Decision-log chain is
+        // still written so observability sees the suppression.
+        if !self.master_enabled.load(Ordering::Relaxed) {
+            crate::nurse::intervention::write_gated_synthesized_pair(
+                &self.observability.decisions,
+                &owner,
+                &kind,
+                "gated_disabled",
+            );
+            return None;
+        }
+        // Swarms-only — mirrors dispatcher's gate at dispatcher.rs:610
+        // for non-Pi pseudo sessions. The InterventionOwner DTO doesn't
+        // map cleanly to `SessionOwner`, so we proxy with the heuristic
+        // "no swarm_id AND no feature_id => not a swarm". All current
+        // swarm-originating callers (e.g. `core/queen.rs::synthesize_nurse_for_error`)
+        // populate both fields together.
+        if self.master_swarms_only.load(Ordering::Relaxed)
+            && owner.swarm_id.is_none()
+            && owner.feature_id.is_none()
+        {
+            crate::nurse::intervention::write_gated_synthesized_pair(
+                &self.observability.decisions,
+                &owner,
+                &kind,
+                "gated_swarms_only",
+            );
+            return None;
+        }
         let ctx = self.intervention_ctx.get()?;
         let payload = crate::nurse::intervention::dispatch_synthesized(
             ctx,
@@ -1134,6 +1203,228 @@ mod tests {
             let snap = engine.snapshot_status();
             assert!(snap.sessions.is_empty());
         }
+    }
+
+    /// Build an unwired engine — no `intervention_ctx`, no dispatcher.
+    /// Sufficient to exercise the new gate inside `report_synthesized`
+    /// since the gate runs BEFORE `intervention_ctx.get()?`.
+    fn build_engine_unwired(cfg: NurseConfig) -> Option<Arc<NurseEngine>> {
+        let bus = Arc::new(NurseBus::new());
+        let pi = Arc::new(crate::pi::manager::PiManager::new_for_tests());
+        let engine = NurseEngine::new(bus, pi, cfg).ok()?;
+        Some(Arc::new(engine))
+    }
+
+    /// Drain rows from the engine's shared decisions JSONL file and
+    /// filter to the supplied `session_id`. The writer is async — poll
+    /// for up to ~2s.
+    async fn decision_rows_for_session(
+        engine: &Arc<NurseEngine>,
+        session_id: &str,
+    ) -> Vec<serde_json::Value> {
+        use crate::nurse::observability::writer::today_yyyy_mm_dd;
+        let path = engine
+            .observability
+            .decisions
+            .root()
+            .join(format!("decisions.jsonl.{}", today_yyyy_mm_dd()));
+        for _ in 0..40 {
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let rows: Vec<serde_json::Value> = text
+                .lines()
+                .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+                .filter(|r| {
+                    r.get("session_id").and_then(|v| v.as_str()) == Some(session_id)
+                })
+                .collect();
+            if !rows.is_empty() {
+                return rows;
+            }
+        }
+        Vec::new()
+    }
+
+    fn final_status(rows: &[serde_json::Value]) -> Option<String> {
+        rows.iter()
+            .find(|r| r.get("event").and_then(|v| v.as_str()) == Some("decision_finalised"))
+            .and_then(|r| r.get("data"))
+            .and_then(|d| d.get("status"))
+            .and_then(|s| s.as_str())
+            .map(|s| s.to_string())
+    }
+
+    #[tokio::test]
+    async fn report_synthesized_returns_none_when_master_disabled() {
+        let cfg = NurseConfig {
+            enabled: false,
+            ..NurseConfig::default()
+        };
+        let Some(engine) = build_engine_unwired(cfg) else {
+            return;
+        };
+        let sid = format!("sess-gate-disabled-{}", uuid::Uuid::new_v4().simple());
+        let owner = InterventionOwner {
+            session_id: Some(sid.clone()),
+            task_id: Some("t-1".into()),
+            ..Default::default()
+        };
+        let kind = SynthesizedKind::SteerFailed {
+            reason: "x".into(),
+        };
+        let out = engine.report_synthesized(owner, kind);
+        assert!(
+            out.is_none(),
+            "report_synthesized must return None when master enabled is false"
+        );
+        let rows = decision_rows_for_session(&engine, &sid).await;
+        assert_eq!(
+            final_status(&rows).as_deref(),
+            Some("gated_disabled"),
+            "expected gated_disabled decision_finalised row; got rows={:?}",
+            rows
+        );
+    }
+
+    #[tokio::test]
+    async fn report_synthesized_gated_when_swarms_only_and_non_swarm_owner() {
+        let cfg = NurseConfig {
+            enabled: true,
+            swarms_only: true,
+            ..NurseConfig::default()
+        };
+        let Some(engine) = build_engine_unwired(cfg) else {
+            return;
+        };
+        // Task-only owner: no swarm_id, no feature_id.
+        let sid = format!("sess-task-only-{}", uuid::Uuid::new_v4().simple());
+        let owner = InterventionOwner {
+            session_id: Some(sid.clone()),
+            task_id: Some("t-7".into()),
+            ..Default::default()
+        };
+        let kind = SynthesizedKind::SteerFailed {
+            reason: "x".into(),
+        };
+        let out = engine.report_synthesized(owner, kind);
+        assert!(
+            out.is_none(),
+            "report_synthesized must return None for non-swarm owner under swarms_only"
+        );
+        let rows = decision_rows_for_session(&engine, &sid).await;
+        assert_eq!(
+            final_status(&rows).as_deref(),
+            Some("gated_swarms_only"),
+            "expected gated_swarms_only decision_finalised row; got rows={:?}",
+            rows
+        );
+    }
+
+    #[tokio::test]
+    async fn report_synthesized_does_not_gate_swarm_owner_under_swarms_only() {
+        // With swarms_only=true AND a swarm-owned synthesized event, the
+        // gate must NOT fire. We can't easily verify dispatch returns
+        // `Some` here without a real AppHandle (the mock-runtime
+        // AppHandle isn't assignable to the non-generic
+        // `InterventionContext::app` field), so we verify the *negative*
+        // observable signal: no `gated_swarms_only` row appears for this
+        // session_id in the decisions log.
+        let cfg = NurseConfig {
+            enabled: true,
+            swarms_only: true,
+            ..NurseConfig::default()
+        };
+        let Some(engine) = build_engine_unwired(cfg) else {
+            return;
+        };
+        let sid = format!("sess-swarm-owner-{}", uuid::Uuid::new_v4().simple());
+        let owner = InterventionOwner {
+            session_id: Some(sid.clone()),
+            swarm_id: Some("swarm-abc".into()),
+            feature_id: Some("feat-001".into()),
+            ..Default::default()
+        };
+        let kind = SynthesizedKind::SteerFailed {
+            reason: "x".into(),
+        };
+        // Without intervention_ctx attached this still returns None
+        // (via `?` on `intervention_ctx.get()`), but importantly the
+        // gate didn't fire — so no decision-log row exists.
+        let _ = engine.report_synthesized(owner, kind);
+
+        // Brief wait so the (non-existent) write would have hit disk.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let rows = decision_rows_for_session(&engine, &sid).await;
+        let gated = rows.iter().any(|r| {
+            r.get("event").and_then(|v| v.as_str()) == Some("decision_finalised")
+                && r.get("data")
+                    .and_then(|d| d.get("status"))
+                    .and_then(|s| s.as_str())
+                    == Some("gated_swarms_only")
+        });
+        assert!(
+            !gated,
+            "swarm-owned synthesized event must not produce a gated_swarms_only row"
+        );
+    }
+
+    #[tokio::test]
+    async fn set_master_enabled_flip_silences_synthesized_path() {
+        // Verify the atomic setter takes effect by checking the
+        // decision log: a baseline (enabled=true) call produces NO
+        // `gated_disabled` row; after `set_master_enabled(false)` a
+        // subsequent call DOES write one.
+        let cfg = NurseConfig {
+            enabled: true,
+            ..NurseConfig::default()
+        };
+        let Some(engine) = build_engine_unwired(cfg) else {
+            return;
+        };
+
+        let sid_before = format!("sess-flip-before-{}", uuid::Uuid::new_v4().simple());
+        let _ = engine.report_synthesized(
+            InterventionOwner {
+                session_id: Some(sid_before.clone()),
+                task_id: Some("t-pre".into()),
+                ..Default::default()
+            },
+            SynthesizedKind::SteerFailed { reason: "x".into() },
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let rows_before = decision_rows_for_session(&engine, &sid_before).await;
+        let gated_before = rows_before.iter().any(|r| {
+            r.get("data")
+                .and_then(|d| d.get("status"))
+                .and_then(|s| s.as_str())
+                == Some("gated_disabled")
+        });
+        assert!(
+            !gated_before,
+            "baseline (enabled=true) call should NOT produce gated_disabled row"
+        );
+
+        // Flip and try again.
+        engine.set_master_enabled(false);
+        let sid_after = format!("sess-flip-after-{}", uuid::Uuid::new_v4().simple());
+        let out = engine.report_synthesized(
+            InterventionOwner {
+                session_id: Some(sid_after.clone()),
+                task_id: Some("t-post".into()),
+                ..Default::default()
+            },
+            SynthesizedKind::SteerFailed { reason: "x".into() },
+        );
+        assert!(out.is_none(), "flip to disabled must return None");
+        let rows_after = decision_rows_for_session(&engine, &sid_after).await;
+        assert_eq!(
+            final_status(&rows_after).as_deref(),
+            Some("gated_disabled"),
+            "flip-after call must produce gated_disabled row; got rows={:?}",
+            rows_after
+        );
     }
 
     #[tokio::test]

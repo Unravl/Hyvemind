@@ -186,8 +186,23 @@ pub async fn set_nurse_config(
         .await
         .map_err(IpcError::from)?;
 
+    // Snapshot the booleans the synthesized path mirrors before moving
+    // `runtime_cfg` into the publish step. Order: config write first,
+    // then atomic update of the sync mirrors. The dispatcher (primary
+    // path) always sees the latest config; the synthesized path
+    // (secondary/fallback) may lag the window of these two sequential
+    // lines — the direction of drift is safe.
+    let enabled_after = runtime_cfg.enabled;
+    let swarms_only_after = runtime_cfg.swarms_only;
+
     // Publish the runtime config so the next tick picks it up.
     *engine.config.write().await = runtime_cfg;
+
+    // Update the sync-readable mirrors used by `report_synthesized` so
+    // the master "Nurse off" / "swarms only" toggles silence the
+    // synthesized path the moment they're committed.
+    engine.set_master_enabled(enabled_after);
+    engine.set_master_swarms_only(swarms_only_after);
 
     // Emit a full snapshot so all frontends (dropdown + settings) reflect
     // the change immediately.

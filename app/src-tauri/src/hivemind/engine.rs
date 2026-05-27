@@ -24,6 +24,7 @@ use crate::pi::manager::PiManager;
 use crate::pi::rpc::PiSessionOptions;
 use crate::pi::session::SessionOwner;
 use crate::providers::{CallRequest, ModelResponse, ProviderRegistry, StreamChunk};
+use crate::state::log_redact::redact_all;
 use crate::state::usage_store::UsageStore;
 use crate::tunables;
 
@@ -1783,7 +1784,6 @@ impl ReviewEngine {
                                     "error": e.to_string(),
                                 })).await;
                             }
-                            let _ = deps.store.fail_job_step(&step_id, &e.to_string()).await;
                             // Surface model-call failures as a visible
                             // Nurse intervention. The Hivemind pseudo
                             // session ID `hm-<review_id>-r<round>-<model>`
@@ -1827,6 +1827,13 @@ impl ReviewEngine {
                                 };
                                 let _ = engine.report_synthesized(new_owner, new_kind);
                             }
+                            // Redact secrets (API keys, bearer tokens, DSNs)
+                            // from the user-visible error message before it
+                            // crosses the IPC boundary or lands in SQLite.
+                            // `err_str` above stays raw for circuit-breaker
+                            // substring detection and the Nurse synth kind.
+                            let redacted_msg = redact_all(&err_str);
+                            let _ = deps.store.fail_job_step(&step_id, &redacted_msg).await;
                             let _ = deps.app.emit(
                                 "hivemind-progress",
                                 add_event_attribution(
@@ -1837,7 +1844,7 @@ impl ReviewEngine {
                                         "round": round,
                                         "model_id": model_id,
                                         "model_idx": model_idx_for_step,
-                                        "message": e.to_string(),
+                                        "message": redacted_msg,
                                     }),
                                     attribution,
                                     Some("round"),
@@ -1855,6 +1862,7 @@ impl ReviewEngine {
                                 in_flight.remove(&task_id)
                             {
                                 let msg = e.to_string();
+                                let redacted_msg = redact_all(&msg);
                                 if let Some(logger) = &deps.review_logger {
                                     logger
                                         .log(
@@ -1863,12 +1871,12 @@ impl ReviewEngine {
                                                 "model_id": model_id,
                                                 "provider": provider,
                                                 "model_idx": model_idx_for_step,
-                                                "error": msg,
+                                                "error": redacted_msg,
                                             }),
                                         )
                                         .await;
                                 }
-                                let _ = deps.store.fail_job_step(&step_id, &msg).await;
+                                let _ = deps.store.fail_job_step(&step_id, &redacted_msg).await;
                                 let _ = deps.app.emit(
                                     "hivemind-progress",
                                     add_event_attribution(
@@ -1879,7 +1887,7 @@ impl ReviewEngine {
                                             "round": round,
                                             "model_id": model_id,
                                             "model_idx": model_idx_for_step,
-                                            "message": msg,
+                                            "message": redacted_msg,
                                         }),
                                         attribution,
                                         Some("round"),
@@ -3059,6 +3067,7 @@ async fn reap_stranded_tasks_attr<R: tauri::Runtime>(
             reason = reason,
             "reaping stranded model task"
         );
+        let redacted_reason = redact_all(reason);
         if let Some(logger) = review_logger {
             logger
                 .log(
@@ -3067,12 +3076,12 @@ async fn reap_stranded_tasks_attr<R: tauri::Runtime>(
                         "model_id": model_id,
                         "provider": provider,
                         "model_idx": model_idx,
-                        "error": reason,
+                        "error": redacted_reason,
                     }),
                 )
                 .await;
         }
-        let _ = store.fail_job_step(&step_id, reason).await;
+        let _ = store.fail_job_step(&step_id, &redacted_reason).await;
         let _ = app.emit(
             "hivemind-progress",
             add_event_attribution(
@@ -3083,7 +3092,7 @@ async fn reap_stranded_tasks_attr<R: tauri::Runtime>(
                     "round": round,
                     "model_id": model_id,
                     "model_idx": model_idx,
-                    "message": reason,
+                    "message": redacted_reason,
                 }),
                 attribution,
                 Some("round"),

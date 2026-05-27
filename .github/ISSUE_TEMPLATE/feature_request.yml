@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest a new feature or improvement.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that's currently hard or impossible?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you'd like to see happen. Mockups / sketches welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about and why this one is preferable.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface does this affect?
+      multiple: true
+      options:
+        - Tasks
+        - Hivemind
+        - Swarms
+        - Settings
+        - Dashboard
+        - Backend / agents
+        - Documentation
+        - Other / unsure
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context

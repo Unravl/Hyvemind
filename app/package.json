@@ -1,0 +1,73 @@
+{
+  "name": "hyvemind",
+  "private": true,
+  "version": "0.1.0-alpha",
+  "description": "Reliable, polished, multi-model AI development studio. Tasks for planning, Hivemind for multi-model review, Swarms for autonomous execution.",
+  "author": "Hayden Evan",
+  "license": "MIT",
+  "homepage": "https://github.com/Unravl/Hyvemind#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Unravl/Hyvemind.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Unravl/Hyvemind/issues"
+  },
+  "keywords": [
+    "ai",
+    "ai-agents",
+    "llm",
+    "tauri",
+    "rust",
+    "anthropic",
+    "openai",
+    "ollama",
+    "developer-tools",
+    "desktop-app"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "prepare-pi": "bash ../scripts/build-pi.sh",
+    "tauri:dev": "npm run prepare-pi && HYVEMIND_DEBUG=1 tauri dev --no-watch",
+    "tauri:build": "npm run prepare-pi && tauri build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/modifiers": "^9.0.0",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@sentry/react": "^10.52.0",
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-shell": "^2.3.5",
+    "focus-trap-react": "^12.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tauri-plugin-sentry-api": "^0.5.0"
+  },
+  "devDependencies": {
+    "@sentry/vite-plugin": "^5.2.1",
+    "@tauri-apps/cli": "^2.11.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "jsdom": "^29.1.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "vitest": "^4.1.5"
+  }
+}

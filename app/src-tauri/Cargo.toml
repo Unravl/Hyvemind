@@ -1,0 +1,78 @@
+[package]
+name = "hyvemind"
+version = "0.1.0-alpha"
+edition = "2021"
+description = "Reliable, polished, multi-model AI development studio. Tasks for planning, Hivemind for multi-model review, Swarms for autonomous execution."
+authors = ["Hayden Evan"]
+license = "MIT"
+homepage = "https://github.com/Unravl/Hyvemind"
+repository = "https://github.com/Unravl/Hyvemind"
+readme = "../../README.md"
+keywords = ["ai", "agents", "llm", "tauri", "desktop"]
+categories = ["development-tools", "gui"]
+publish = false
+
+[dependencies]
+tauri = { version = "2", features = ["image-png", "test"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+moka = { version = "0.12", features = ["future"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+base64 = "0.22"
+eventsource-stream = "0.2"
+thiserror = "2"
+async-trait = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+tracing-appender = "0.2"
+rand = "0.8"
+tempfile = "3"
+dirs = "5"
+tokio-util = "0.7"
+futures = "0.3"
+futures-util = "0.3"
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
+aes-gcm = "0.10"
+sentry = { version = "0.42", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls", "tracing"] }
+sentry-tracing = "0.42"
+tauri-plugin-sentry = { version = "0.5", default-features = false }
+regex = "1"
+ignore = "0.4"
+url = "2"
+dunce = "1"
+which = "6"
+# Nurse subsystem support
+lru = "0.16"
+strip-ansi-escapes = "0.2"
+zstd = "0.13"
+siphasher = "1"
+twox-hash = "1"
+smallvec = { version = "1", features = ["serde"] }
+
+[features]
+# Audit 7.2: when enabled, compiles `pi::mock::MockRpcClient` outside of
+# `#[cfg(test)]` so integration tests in sibling crates / `tests/` can
+# substitute the mock transport via `PiManager::with_transport_factory`.
+# In-crate `#[cfg(test)]` users do NOT need to enable this feature.
+test-mocks = []
+
+[dev-dependencies]
+proptest = "1"
+tokio = { version = "1", features = ["full", "test-util"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# Emit debug info in release builds so Sentry can resolve stack frames.
+# `strip = "none"` keeps symbols available for sentry-cli upload-dif.
+[profile.release]
+debug = true
+strip = "none"

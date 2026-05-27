@@ -1,0 +1,29 @@
+# cargo-audit ignore list
+#
+# These ignores are reviewed periodically. When a fix becomes available
+# upstream, remove the corresponding entry.
+#
+# All entries below are transitive dependencies of `tauri 2` or `sqlx`.
+# None are reachable in our usage paths, and none have an upstream fix.
+
+[advisories]
+ignore = [
+    "RUSTSEC-2023-0071",  # rsa Marvin Attack — via sqlx-mysql, never reached (we use sqlite). No upstream fix.
+    "RUSTSEC-2024-0411",  # gdkwayland-sys — gtk-rs unmaintained, transitive Tauri Linux dep. No replacement until Tauri migrates off GTK3.
+    "RUSTSEC-2024-0412",  # gdk — gtk-rs unmaintained, transitive Tauri Linux dep.
+    "RUSTSEC-2024-0413",  # atk — gtk-rs unmaintained, transitive Tauri Linux dep.
+    "RUSTSEC-2024-0414",  # gdkx11-sys — gtk-rs unmaintained, transitive Tauri Linux dep.
+    "RUSTSEC-2024-0415",  # gtk — gtk-rs unmaintained, transitive Tauri Linux dep.
+    "RUSTSEC-2024-0416",  # atk-sys — gtk-rs unmaintained, transitive Tauri Linux dep.
+    "RUSTSEC-2024-0417",  # gdkx11 — gtk-rs unmaintained, transitive Tauri Linux dep.
+    "RUSTSEC-2024-0418",  # gdk-sys — gtk-rs unmaintained, transitive Tauri Linux dep.
+    "RUSTSEC-2024-0419",  # gtk3-macros — gtk-rs unmaintained, transitive Tauri Linux dep.
+    "RUSTSEC-2024-0420",  # gtk-sys — gtk-rs unmaintained, transitive Tauri Linux dep.
+    "RUSTSEC-2024-0370",  # proc-macro-error — unmaintained, pulled in transitively. No real risk.
+    "RUSTSEC-2024-0429",  # transitive unmaintained dep, no fix available.
+    "RUSTSEC-2025-0075",  # unic-char-range — unmaintained, pulled in transitively.
+    "RUSTSEC-2025-0080",  # unic-common — unmaintained, pulled in transitively.
+    "RUSTSEC-2025-0081",  # unic-char-property — unmaintained, pulled in transitively.
+    "RUSTSEC-2025-0098",  # transitive unmaintained dep, no fix available.
+    "RUSTSEC-2025-0100",  # unic-ucd-ident — unmaintained, pulled in transitively.
+]

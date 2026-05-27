@@ -1,0 +1,33 @@
+
+.DS_Store
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+
+# Internal product/strategy doc — not for public repo
+PRODUCT.md
+
+# Local Pi / taskplane agent configs
+.pi/
+
+# Bundled Pi build pipeline (scripts/build-pi.sh)
+build/
+
+# Node / frontend
+node_modules/
+app/dist/
+*.tsbuildinfo
+
+# Rust build cache (23 GB)
+app/src-tauri/target/
+# Root-level target/ if someone accidentally `cargo build`s from the repo root
+/target/
+
+# Pi distribution build artifacts (built by scripts/build-pi.sh)
+# Keep only the compiled pi-<target-triple> binary that ships with the app.
+app/src-tauri/binaries/*
+!app/src-tauri/binaries/pi-*-apple-darwin
+!app/src-tauri/binaries/pi-*-linux-*
+!app/src-tauri/binaries/pi-*-windows-*

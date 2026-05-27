@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 36a53ddf4c5163299565ce706bc1a5b9aac83efdb22807aceef7ba7d8d6defab # shrinks to features = [Feature { id: "f-0", name: "f-0", description: "", status: Pending, dependencies: ["f-1"], milestone: None, fix_attempt_count: 0, max_fix_attempts: 3, fulfills: [] }, Feature { id: "f-1", name: "f-1", description: "", status: Pending, dependencies: [], milestone: None, fix_attempt_count: 0, max_fix_attempts: 3, fulfills: [] }, Feature { id: "f-2", name: "f-2", description: "", status: Pending, dependencies: [], milestone: None, fix_attempt_count: 0, max_fix_attempts: 3, fulfills: [] }]

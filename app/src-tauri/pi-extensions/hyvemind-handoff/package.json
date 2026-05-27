@@ -1,0 +1,12 @@
+{
+  "name": "hyvemind-handoff",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Registers Hyvemind's structured-output tools (submit_handoff, submit_plan, submit_questions, submit_features, submit_task_meta, submit_context, submit_stability_*) on the Pi extension API. The Rust backend captures the model's tool-call args off the JSONL stream and bypasses delimiter parsing.",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

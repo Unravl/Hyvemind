@@ -1,0 +1,12 @@
+{
+  "name": "hyvemind-providers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Registers Hyvemind-configured OpenAI-compatible providers with bundled Pi",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

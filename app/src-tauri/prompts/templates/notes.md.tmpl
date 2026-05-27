@@ -1,0 +1,28 @@
+# notes.md
+
+> Per-swarm architecture and environment notes. This file is OPTIONAL.
+> When present at `~/.hyvemind/swarms/<id>/notes.md`, its contents are
+> injected into the Worker prompt under the `### Architecture & Environment
+> Notes` subheader.
+>
+> This is the consolidated replacement for Factory's `library/architecture.md`,
+> `library/environment.md`, and `library/user-testing.md` triplet --- one
+> file, three optional sections.
+
+## Architecture Overview
+
+- <One-paragraph or bulleted sketch of the system: the major components and
+  how data flows between them.>
+- <Key types or modules a worker is likely to touch.>
+
+## Environment & Dependencies
+
+- <Required runtime versions: language, framework, package manager.>
+- <External services the project assumes (databases, queues, APIs) ---
+  cross-reference `services.yaml` where relevant.>
+
+## Validation Surfaces
+
+- <How to verify a change manually (commands to run, endpoints to hit,
+  fixtures to inspect).>
+- <What "done" looks like for typical features in this project.>

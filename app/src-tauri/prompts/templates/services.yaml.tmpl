@@ -1,0 +1,40 @@
+# services.yaml --- per-swarm command and service registry
+#
+# This file is OPTIONAL. When present at
+# ~/.hyvemind/swarms/<id>/services.yaml, Workers (and later Guard / readiness
+# checks) read it to know which shell commands to invoke for common project
+# tasks (install, typecheck, test, build, dev) and which ambient services
+# (databases, queues, etc.) the project depends on.
+#
+# Replace the placeholders below with the real commands and services for your
+# project, or delete any section you do not need. Missing sections are
+# perfectly valid -- nothing here is required.
+
+# ---------------------------------------------------------------------------
+# Named shell commands. The KEY is the logical command name; the VALUE is the
+# literal shell string the worker will run. Agents will prefer these over
+# guessing -- if you provide `test`, the worker will run that command to
+# verify its work rather than inferring `cargo test` / `npm test` / etc.
+# ---------------------------------------------------------------------------
+commands:
+  install: "npm install"
+  typecheck: "npm run typecheck"
+  test: "npm test"
+  build: "npm run build"
+  dev: "npm run dev"
+
+# ---------------------------------------------------------------------------
+# Ambient services the project depends on. Each entry can include any subset
+# of `port`, `host`, `start`, `stop`, `healthcheck`. Only `name` is required.
+#
+# Agents do not start or stop services on their own (yet) -- the metadata is
+# surfaced in the worker prompt so the model knows the service exists and
+# how to interact with it.
+# ---------------------------------------------------------------------------
+services:
+  - name: postgres
+    port: 5432
+    host: localhost
+    start: "docker compose up -d postgres"
+    stop: "docker compose stop postgres"
+    healthcheck: "pg_isready -h localhost"

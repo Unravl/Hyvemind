@@ -1,0 +1,28 @@
+# AGENTS.md
+
+> Per-swarm project conventions. This file is OPTIONAL. When present at
+> `~/.hyvemind/swarms/<id>/AGENTS.md`, its contents are injected into the
+> Worker prompt under the `### Project Conventions` subheader so the
+> implementer has the right rules of the road before touching any code.
+>
+> Delete or expand any section. Empty sections may be removed entirely.
+
+## Project Layout
+
+- `<top-level-dir-1>/` --- <one-line purpose>
+- `<top-level-dir-2>/` --- <one-line purpose>
+
+## Coding Conventions
+
+- Naming: <e.g. `snake_case` for Rust, `camelCase` for TypeScript>.
+- Error handling: <e.g. `anyhow::Result` at boundaries, `thiserror` for domain errors>.
+
+## Off-Limits Paths
+
+- `<path/that/must/not/be/modified>` --- <why>
+- `<vendored-or-generated-dir>/` --- <why>
+
+## Testing Conventions
+
+- Where tests live: <e.g. inline `#[cfg(test)] mod tests` next to code>.
+- How tests are run: <e.g. `cargo test --lib` from `app/src-tauri`>.

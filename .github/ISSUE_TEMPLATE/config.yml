@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and discussion
+    url: https://github.com/Unravl/Hyvemind/discussions
+    about: Please ask and answer general questions in GitHub Discussions.
+  - name: Security disclosure
+    url: https://github.com/Unravl/Hyvemind/security/policy
+    about: Please report security vulnerabilities privately, not via public issues.

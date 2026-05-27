@@ -1,0 +1,40 @@
+{
+  "productName": "Hyvemind",
+  "version": "0.1.0",
+  "identifier": "com.hyvemind.app",
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1430",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost http://localhost:* ws://localhost:*; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "Hayden Evan",
+    "copyright": "Copyright © 2026 Hayden Evan. Licensed under MIT.",
+    "category": "DeveloperTool",
+    "shortDescription": "Multi-model AI development studio.",
+    "longDescription": "Hyvemind combines plan-building Task conversations, multi-model code review, and self-healing autonomous Swarms in a single polished desktop app.",
+    "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+    "externalBin": ["binaries/pi"],
+    "resources": [
+      "binaries/pi-extensions/**/*",
+      "binaries/package.json",
+      "binaries/dist/**/*",
+      "binaries/theme/**/*"
+    ]
+  }
+}

@@ -1236,9 +1236,7 @@ mod tests {
             let rows: Vec<serde_json::Value> = text
                 .lines()
                 .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-                .filter(|r| {
-                    r.get("session_id").and_then(|v| v.as_str()) == Some(session_id)
-                })
+                .filter(|r| r.get("session_id").and_then(|v| v.as_str()) == Some(session_id))
                 .collect();
             if !rows.is_empty() {
                 return rows;
@@ -1271,9 +1269,7 @@ mod tests {
             task_id: Some("t-1".into()),
             ..Default::default()
         };
-        let kind = SynthesizedKind::SteerFailed {
-            reason: "x".into(),
-        };
+        let kind = SynthesizedKind::SteerFailed { reason: "x".into() };
         let out = engine.report_synthesized(owner, kind);
         assert!(
             out.is_none(),
@@ -1305,9 +1301,7 @@ mod tests {
             task_id: Some("t-7".into()),
             ..Default::default()
         };
-        let kind = SynthesizedKind::SteerFailed {
-            reason: "x".into(),
-        };
+        let kind = SynthesizedKind::SteerFailed { reason: "x".into() };
         let out = engine.report_synthesized(owner, kind);
         assert!(
             out.is_none(),
@@ -1346,9 +1340,7 @@ mod tests {
             feature_id: Some("feat-001".into()),
             ..Default::default()
         };
-        let kind = SynthesizedKind::SteerFailed {
-            reason: "x".into(),
-        };
+        let kind = SynthesizedKind::SteerFailed { reason: "x".into() };
         // Without intervention_ctx attached this still returns None
         // (via `?` on `intervention_ctx.get()`), but importantly the
         // gate didn't fire — so no decision-log row exists.
